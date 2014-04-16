@@ -144,8 +144,8 @@ angular.module('gettext').filter('translate', [
   '$interpolate',
   '$parse',
   function (gettextCatalog, $interpolate, $parse) {
-    return function (input) {
-      return gettextCatalog.getString(input);
+    return function (input, params) {
+      return $interpolate(gettextCatalog.getString(input))(params);
     };
   }
 ]);
