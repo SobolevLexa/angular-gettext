@@ -153,7 +153,10 @@ angular.module('gettext').filter('translate', [
   '$parse',
   function (gettextCatalog, $interpolate, $parse) {
     return function (input, params) {
-      return $interpolate(gettextCatalog.getString(input))(params);
+      if (angular.isObject(params)) {
+        return $interpolate(gettextCatalog.getString(input))(params);
+      }
+      return gettextCatalog.getString(input);
     };
   }
 ]);
