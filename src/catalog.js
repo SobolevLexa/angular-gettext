@@ -1,4 +1,4 @@
-angular.module('gettext').factory('gettextCatalog', ['gettextPlurals', '$interpolate', function (gettextPlurals, $interpolate, $http, $cacheFactory) {
+angular.module('gettext').factory('gettextCatalog', ['gettextPlurals', '$interpolate', '$http', '$cacheFactory', function (gettextPlurals, $interpolate, $http, $cacheFactory) {
     var catalog;
 
     var prefixDebug = function (string) {

@@ -11,6 +11,8 @@ angular.module('gettext').constant('gettext', function (str) {
 angular.module('gettext').factory('gettextCatalog', [
   'gettextPlurals',
   '$interpolate',
+  '$http',
+  '$cacheFactory',
   function (gettextPlurals, $interpolate, $http, $cacheFactory) {
     var catalog;
     var prefixDebug = function (string) {
