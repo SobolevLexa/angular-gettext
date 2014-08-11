@@ -10,10 +10,11 @@ angular.module('gettext').constant('gettext', function (str) {
 });
 angular.module('gettext').factory('gettextCatalog', [
   'gettextPlurals',
-  '$interpolate',
   '$http',
   '$cacheFactory',
-  function (gettextPlurals, $interpolate, $http, $cacheFactory) {
+  '$interpolate',
+  '$rootScope',
+  function (gettextPlurals, $http, $cacheFactory, $interpolate, $rootScope) {
     var catalog;
     var prefixDebug = function (string) {
       if (catalog.debug && catalog.currentLanguage !== catalog.baseLanguage) {
@@ -28,13 +29,16 @@ angular.module('gettext').factory('gettextCatalog', [
       baseLanguage: 'en',
       currentLanguage: 'en',
       cache: $cacheFactory('strings'),
+      setCurrentLanguage: function (lang) {
+        this.currentLanguage = lang;
+        $rootScope.$broadcast('gettextLanguageChanged');
+      },
       setStrings: function (language, strings) {
-        var key, val, _results;
         if (!this.strings[language]) {
           this.strings[language] = {};
         }
-        for (key in strings) {
-          val = strings[key];
+        for (var key in strings) {
+          var val = strings[key];
           if (typeof val === 'string') {
             this.strings[language][key] = [val];
           } else {
@@ -42,24 +46,19 @@ angular.module('gettext').factory('gettextCatalog', [
           }
         }
       },
-      getStringForm: function (string, n, dataObject) {
+      getStringForm: function (string, n) {
         var stringTable = this.strings[this.currentLanguage] || {};
         var plurals = stringTable[string] || [];
         return plurals[n];
       },
-      getString: function (string, dataObject) {
-        var text = this.getStringForm(string, 0, dataObject) || prefixDebug(string);
-        if (angular.isObject(dataObject)) {
-          return $interpolate(text)(dataObject);
-        }
-        return text;
+      getString: function (string, context) {
+        string = this.getStringForm(string, 0) || prefixDebug(string);
+        return context ? $interpolate(string)(context) : string;
       },
-      getPlural: function (n, string, stringPlural, dataObject) {
-        var form = gettextPlurals(this.currentLanguage, n), text = this.getStringForm(string, form, dataObject) || prefixDebug(n === 1 ? string : stringPlural);
-        if (angular.isObject(dataObject)) {
-          return $interpolate(text)(dataObject);
-        }
-        return text;
+      getPlural: function (n, string, stringPlural, context) {
+        var form = gettextPlurals(this.currentLanguage, n);
+        string = this.getStringForm(string, form) || prefixDebug(n === 1 ? string : stringPlural);
+        return context ? $interpolate(string)(context) : string;
       },
       loadRemote: function (url) {
         return $http({
@@ -78,14 +77,11 @@ angular.module('gettext').factory('gettextCatalog', [
 ]);
 angular.module('gettext').directive('translate', [
   'gettextCatalog',
-  '$interpolate',
   '$parse',
-  '$compile',
-  function (gettextCatalog, $interpolate, $parse, $compile) {
-    /**
-     * Trim fallback for old browsers(instead of jQuery)
-     * Based on AngularJS-v1.2.2 (angular.js#620)
-     */
+  '$animate',
+  function (gettextCatalog, $parse, $animate) {
+    // Trim polyfill for old browsers (instead of jQuery)
+    // Based on AngularJS-v1.2.2 (angular.js#620)
     var trim = function () {
         if (!String.prototype.trim) {
           return function (value) {
@@ -96,66 +92,71 @@ angular.module('gettext').directive('translate', [
           return typeof value === 'string' ? value.trim() : value;
         };
       }();
+    function assert(condition, missing, found) {
+      if (!condition) {
+        throw new Error('You should add a ' + missing + ' attribute whenever you add a ' + found + ' attribute.');
+      }
+    }
     return {
+      restrict: 'A',
+      terminal: true,
+      priority: 350,
       transclude: 'element',
-      priority: 499,
-      compile: function (element, attrs, transclude) {
-        return function ($scope, $element) {
+      link: function (scope, element, attrs, ctrl, transclude) {
           // Validate attributes
-          var assert = function (condition, missing, found) {
-            if (!condition) {
-              throw new Error('You should add a ' + missing + ' attribute whenever you add a ' + found + ' attribute.');
-            }
-          };
           assert(!attrs.translatePlural || attrs.translateN, 'translate-n', 'translate-plural');
           assert(!attrs.translateN || attrs.translatePlural, 'translate-plural', 'translate-n');
-          // See https://github.com/angular/angular.js/issues/4852
-          if (attrs.ngIf) {
-            throw new Error('You should not combine translate with ng-if, this will lead to problems.');
-          }
-          if (attrs.ngSwitchWhen) {
-            throw new Error('You should not combine translate with ng-switch-when, this will lead to problems.');
-          }
+        var currentEl = null;
           var countFn = $parse(attrs.translateN);
-          transclude($scope, function (clone) {
-            var input = trim(clone.html());
-            clone.removeAttr('translate');
-            $element.replaceWith(clone);
-            return $scope.$watch(function () {
-              var prev = clone.html();
+        var pluralScope = null;
+        function update() {
+          var prevEl = currentEl;
+          currentEl = transclude(scope, function (clone) {
+            var msgid = trim(clone.html());
               // Fetch correct translated string.
               var translated;
               if (attrs.translatePlural) {
-                translated = gettextCatalog.getPlural(countFn($scope), input, attrs.translatePlural);
+              scope = pluralScope || (pluralScope = scope.$new());
+              scope.$count = countFn(scope);
+              translated = gettextCatalog.getPlural(scope.$count, msgid, attrs.translatePlural);
               } else {
-                translated = gettextCatalog.getString(input);
+              translated = gettextCatalog.getString(msgid);
               }
-              // Interpolate with scope.
-              var interpolated = $interpolate(translated)($scope);
-              if (prev === interpolated) {
-                return;  // Skip DOM change.
+            clone.prop('__msgstr', translated);
+            $animate.enter(clone, null, element);
+            if (prevEl !== null) {
+              $animate.leave(prevEl, function () {
+                prevEl = null;
+              });
               }
-              clone.html(interpolated);
-              if (attrs.translateCompile !== undefined) {
-                $compile(clone.contents())($scope);
-              }
-              return clone;
-            });
           });
+              }
+        if (attrs.translateN) {
+          scope.$watch(attrs.translateN, update);
+        }
+        scope.$on('gettextLanguageChanged', update);
+        update();
+      }
         };
+  }
+]).directive('translate', [
+  '$compile',
+  function ($compile) {
+    return {
+      restrict: 'A',
+      priority: -350,
+      link: function (scope, element) {
+        var msgstr = element.prop('__msgstr');
+        element.empty().append(msgstr);
+        $compile(element.contents())(scope);
       }
     };
   }
 ]);
 angular.module('gettext').filter('translate', [
   'gettextCatalog',
-  '$interpolate',
-  '$parse',
-  function (gettextCatalog, $interpolate, $parse) {
-    return function (input, params) {
-      if (angular.isObject(params)) {
-        return $interpolate(gettextCatalog.getString(input))(params);
-      }
+  function (gettextCatalog) {
+    return function (input) {
       return gettextCatalog.getString(input);
     };
   }

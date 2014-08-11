@@ -1,9 +1,9 @@
-angular.module('gettext').factory('gettextCatalog', ['gettextPlurals', '$interpolate', '$http', '$cacheFactory', function (gettextPlurals, $interpolate, $http, $cacheFactory) {
+angular.module('gettext').factory('gettextCatalog', function (gettextPlurals, $http, $cacheFactory, $interpolate, $rootScope) {
     var catalog;
 
     var prefixDebug = function (string) {
         if (catalog.debug && catalog.currentLanguage !== catalog.baseLanguage) {
-            return "[MISSING]: " + string;
+            return '[MISSING]: ' + string;
         } else {
             return string;
         }
@@ -16,14 +16,17 @@ angular.module('gettext').factory('gettextCatalog', ['gettextPlurals', '$interpo
         currentLanguage: 'en',
         cache: $cacheFactory('strings'),
 
+        setCurrentLanguage: function (lang) {
+            this.currentLanguage = lang;
+            $rootScope.$broadcast('gettextLanguageChanged');
+        },
         setStrings: function (language, strings) {
-            var key, val, _results;
             if (!this.strings[language]) {
                 this.strings[language] = {};
             }
 
-            for (key in strings) {
-                val = strings[key];
+            for (var key in strings) {
+                var val = strings[key];
                 if (typeof val === 'string') {
                     this.strings[language][key] = [val];
                 } else {
@@ -32,27 +35,21 @@ angular.module('gettext').factory('gettextCatalog', ['gettextPlurals', '$interpo
             }
         },
 
-        getStringForm: function (string, n, dataObject) {
+        getStringForm: function (string, n) {
             var stringTable = this.strings[this.currentLanguage] || {};
             var plurals = stringTable[string] || [];
             return plurals[n];
         },
 
-        getString: function (string, dataObject) {
-            var text = this.getStringForm(string, 0, dataObject) || prefixDebug(string);
-            if (angular.isObject(dataObject)) {
-                return $interpolate(text)(dataObject);
-            }
-            return text;
+        getString: function (string, context) {
+            string = this.getStringForm(string, 0) || prefixDebug(string);
+            return context ? $interpolate(string)(context) : string;
         },
 
-        getPlural: function (n, string, stringPlural, dataObject) {
-            var form = gettextPlurals(this.currentLanguage, n),
-                text = this.getStringForm(string, form, dataObject) || prefixDebug((n === 1 ? string : stringPlural));
-            if (angular.isObject(dataObject)) {
-                return $interpolate(text)(dataObject);
-            }
-            return text;
+        getPlural: function (n, string, stringPlural, context) {
+            var form = gettextPlurals(this.currentLanguage, n);
+            string = this.getStringForm(string, form) || prefixDebug(n === 1 ? string : stringPlural);
+            return context ? $interpolate(string)(context) : string;
         },
 
         loadRemote: function (url) {
@@ -69,4 +66,4 @@ angular.module('gettext').factory('gettextCatalog', ['gettextPlurals', '$interpo
     };
 
     return catalog;
-}]);
+});

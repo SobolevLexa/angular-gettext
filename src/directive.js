@@ -1,8 +1,8 @@
-angular.module('gettext').directive('translate', function (gettextCatalog, $interpolate, $parse, $compile) {
-    /**
-     * Trim fallback for old browsers(instead of jQuery)
-     * Based on AngularJS-v1.2.2 (angular.js#620)
-     */
+angular.module('gettext')
+    // First directive substitutes the correct translation
+    .directive('translate', function (gettextCatalog, $parse, $animate) {
+        // Trim polyfill for old browsers (instead of jQuery)
+        // Based on AngularJS-v1.2.2 (angular.js#620)
     var trim = (function () {
         if (!String.prototype.trim) {
             return function (value) {
@@ -13,62 +13,74 @@ angular.module('gettext').directive('translate', function (gettextCatalog, $inte
             return (typeof value === 'string') ? value.trim() : value;
         };
     })();
+        function assert(condition, missing, found) {
+            if (!condition) {
+                throw new Error('You should add a ' + missing + ' attribute whenever you add a ' + found + ' attribute.');
+            }
+        }
 
     return {
+            restrict: 'A',
+            terminal: true,
+            priority: 350,
         transclude: 'element',
-        priority: 499,
-        compile: function (element, attrs, transclude) {
-            return function ($scope, $element) {
+            link: function (scope, element, attrs, ctrl, transclude) {
                 // Validate attributes
-                var assert = function (condition, missing, found) {
-                    if (!condition) {
-                        throw new Error("You should add a " + missing + " attribute whenever you add a " + found + " attribute.");
-                    }
-                };
 
                 assert(!attrs.translatePlural || attrs.translateN, 'translate-n', 'translate-plural');
                 assert(!attrs.translateN || attrs.translatePlural, 'translate-plural', 'translate-n');
 
-                // See https://github.com/angular/angular.js/issues/4852
-                if (attrs.ngIf) {
-                    throw new Error("You should not combine translate with ng-if, this will lead to problems.");
-                }
-                if (attrs.ngSwitchWhen) {
-                    throw new Error("You should not combine translate with ng-switch-when, this will lead to problems.");
-                }
+                var currentEl = null;
 
                 var countFn = $parse(attrs.translateN);
+                var pluralScope = null;
 
-                transclude($scope, function (clone) {
-                    var input = trim(clone.html());
-                    clone.removeAttr('translate');
-                    $element.replaceWith(clone);
+                function update() {
+                    var prevEl = currentEl;
 
-                    return $scope.$watch(function () {
-                        var prev = clone.html();
+                    currentEl = transclude(scope, function (clone) {
+                        var msgid = trim(clone.html());
 
                         // Fetch correct translated string.
                         var translated;
                         if (attrs.translatePlural) {
-                            translated = gettextCatalog.getPlural(countFn($scope), input, attrs.translatePlural);
+                            scope = pluralScope || (pluralScope = scope.$new());
+                            scope.$count = countFn(scope);
+                            translated = gettextCatalog.getPlural(scope.$count, msgid, attrs.translatePlural);
                         } else {
-                            translated = gettextCatalog.getString(input);
+                            translated = gettextCatalog.getString(msgid);
                         }
 
-                        // Interpolate with scope.
-                        var interpolated = $interpolate(translated)($scope);
-                        if (prev === interpolated) {
-                            return; // Skip DOM change.
-                        }
-                        clone.html(interpolated);
-                        if (attrs.translateCompile !== undefined) {
-                            $compile(clone.contents())($scope);
-                        }
-                        return clone;
+                        clone.prop('__msgstr', translated);
+                        $animate.enter(clone, null, element);
 
+                        if (prevEl !== null) {
+                            $animate.leave(prevEl, function () {
+                                prevEl = null;
+                            });
+                        }
                     });
-                });
+                        }
+
+                if (attrs.translateN) {
+                    scope.$watch(attrs.translateN, update);
+                }
+
+                scope.$on('gettextLanguageChanged', update);
+
+                update();
+            }
             };
+    })
+    // Second directive takes care of compiling the substituted markup.
+    .directive('translate', function ($compile) {
+        return {
+            restrict: 'A',
+            priority: -350,
+            link: function (scope, element) {
+                var msgstr = element.prop('__msgstr');
+                element.empty().append(msgstr);
+                $compile(element.contents())(scope);
         }
     };
 });
