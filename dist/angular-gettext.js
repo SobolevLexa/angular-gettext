@@ -2,7 +2,7 @@ angular.module('gettext', []);
 angular.module('gettext').constant('gettext', function (str) {
   /*
      * Does nothing, simply returns the input string.
-     * 
+     *
      * This function serves as a marker for `grunt-angular-gettext` to know that
      * this string should be extracted for translations.
      */
@@ -10,11 +10,10 @@ angular.module('gettext').constant('gettext', function (str) {
 });
 angular.module('gettext').factory('gettextCatalog', [
   'gettextPlurals',
+  '$interpolate',
   '$http',
   '$cacheFactory',
-  '$interpolate',
-  '$rootScope',
-  function (gettextPlurals, $http, $cacheFactory, $interpolate, $rootScope) {
+  function (gettextPlurals, $interpolate, $http, $cacheFactory, $rootScope) {
     var catalog;
     var prefixDebug = function (string) {
       if (catalog.debug && catalog.currentLanguage !== catalog.baseLanguage) {
@@ -103,41 +102,41 @@ angular.module('gettext').directive('translate', [
       priority: 350,
       transclude: 'element',
       link: function (scope, element, attrs, ctrl, transclude) {
-          // Validate attributes
-          assert(!attrs.translatePlural || attrs.translateN, 'translate-n', 'translate-plural');
-          assert(!attrs.translateN || attrs.translatePlural, 'translate-plural', 'translate-n');
+        // Validate attributes
+        assert(!attrs.translatePlural || attrs.translateN, 'translate-n', 'translate-plural');
+        assert(!attrs.translateN || attrs.translatePlural, 'translate-plural', 'translate-n');
         var currentEl = null;
-          var countFn = $parse(attrs.translateN);
+        var countFn = $parse(attrs.translateN);
         var pluralScope = null;
         function update() {
           var prevEl = currentEl;
           currentEl = transclude(scope, function (clone) {
             var msgid = trim(clone.html());
-              // Fetch correct translated string.
-              var translated;
-              if (attrs.translatePlural) {
+            // Fetch correct translated string.
+            var translated;
+            if (attrs.translatePlural) {
               scope = pluralScope || (pluralScope = scope.$new());
               scope.$count = countFn(scope);
               translated = gettextCatalog.getPlural(scope.$count, msgid, attrs.translatePlural);
-              } else {
+            } else {
               translated = gettextCatalog.getString(msgid);
-              }
+            }
             clone.prop('__msgstr', translated);
             $animate.enter(clone, null, element);
             if (prevEl !== null) {
               $animate.leave(prevEl, function () {
                 prevEl = null;
               });
-              }
+            }
           });
-              }
+        }
         if (attrs.translateN) {
           scope.$watch(attrs.translateN, update);
         }
         scope.$on('gettextLanguageChanged', update);
         update();
       }
-        };
+    };
   }
 ]).directive('translate', [
   '$compile',
@@ -155,8 +154,12 @@ angular.module('gettext').directive('translate', [
 ]);
 angular.module('gettext').filter('translate', [
   'gettextCatalog',
-  function (gettextCatalog) {
-    return function (input) {
+  '$interpolate',
+  function (gettextCatalog, $interpolate) {
+    return function (input, params) {
+      if (angular.isObject(params)) {
+        return $interpolate(gettextCatalog.getString(input))(params);
+      }
       return gettextCatalog.getString(input);
     };
   }

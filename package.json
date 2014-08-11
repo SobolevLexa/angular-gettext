@@ -6,10 +6,10 @@
   "directories": {
     "test": "test"
   },
-  "scripts": {
-    "test": "grunt ci",
-    "prepublish": "grunt build"
-  },
+  //"scripts": {
+  //  "test": "grunt ci",
+  //  "prepublish": "grunt build"
+  //},
   "keywords": [
     "angular",
     "gettext"

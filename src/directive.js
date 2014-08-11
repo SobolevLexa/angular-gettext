@@ -3,27 +3,28 @@ angular.module('gettext')
     .directive('translate', function (gettextCatalog, $parse, $animate) {
         // Trim polyfill for old browsers (instead of jQuery)
         // Based on AngularJS-v1.2.2 (angular.js#620)
-    var trim = (function () {
-        if (!String.prototype.trim) {
+        var trim = (function () {
+            if (!String.prototype.trim) {
+                return function (value) {
+                    return (typeof value === 'string') ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
+                };
+            }
             return function (value) {
-                return (typeof value === 'string') ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
+                return (typeof value === 'string') ? value.trim() : value;
             };
-        }
-        return function (value) {
-            return (typeof value === 'string') ? value.trim() : value;
-        };
-    })();
+        })();
+
         function assert(condition, missing, found) {
             if (!condition) {
                 throw new Error('You should add a ' + missing + ' attribute whenever you add a ' + found + ' attribute.');
             }
         }
 
-    return {
+        return {
             restrict: 'A',
             terminal: true,
             priority: 350,
-        transclude: 'element',
+            transclude: 'element',
             link: function (scope, element, attrs, ctrl, transclude) {
                 // Validate attributes
 
@@ -60,7 +61,7 @@ angular.module('gettext')
                             });
                         }
                     });
-                        }
+                }
 
                 if (attrs.translateN) {
                     scope.$watch(attrs.translateN, update);
@@ -70,7 +71,7 @@ angular.module('gettext')
 
                 update();
             }
-            };
+        };
     })
     // Second directive takes care of compiling the substituted markup.
     .directive('translate', function ($compile) {
@@ -81,6 +82,6 @@ angular.module('gettext')
                 var msgstr = element.prop('__msgstr');
                 element.empty().append(msgstr);
                 $compile(element.contents())(scope);
-        }
-    };
-});
+            }
+        };
+    });
